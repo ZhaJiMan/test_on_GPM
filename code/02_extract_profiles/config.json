@@ -1,0 +1,17 @@
+{
+    "map_extent": [
+        100,
+        130,
+        25,
+        50
+    ],
+    "DPR_extent": [
+        110,
+        124,
+        32,
+        45
+    ],
+    "input_dirpath": "/d4/wangj/dust_precipitation/results/01_find_cases",
+    "data_dirpath": "/d4/wangj/dust_precipitation/data",
+    "result_dirpath": "/d4/wangj/dust_precipitation/results/02_extract_profiles"
+}
