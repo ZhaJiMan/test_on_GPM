@@ -3,7 +3,7 @@
 # 提取每个个例的降水廓线数据,并分别将污染组与清洁组的所有个例的廓线数据
 # 连接为一个文件.
 #
-# 数据的空间范围为DPR_extent内的数据,程序具体操作为:
+# 程序具体操作为:
 # - 提取个例对应的DPR文件中的降水信息.
 # - 用个例对应的ENV文件中的温度信息将降水廓线等数据转换到温度坐标上.
 # - 将GMI_1B的亮温数据通过最邻近插值插到DPR坐标上.
@@ -18,85 +18,76 @@
 import json
 from pathlib import Path
 from multiprocessing import Pool
-
 import sys
 sys.path.append('../modules')
-from region_funcs import get_extent_flag_both
-from helper_funcs import recreate_dir
-from convert_funcs import *
 
 import h5py
 import numpy as np
 import pandas as pd
 import xarray as xr
 
+from region_funcs import region_mask
+from helper_funcs import recreate_dir
+from convert_funcs import profile_converter, convert_height, match_to_DPR
+
 # 读取配置文件,将config作为全局变量.
 with open('config.json', 'r') as f:
     config = json.load(f)
-
-def set_output_filename(case):
-    '''根据个例的降水时间设置nc文件的输出名.'''
-    rain_time = pd.to_datetime(case['rain_time'])
-    time_str = rain_time.strftime('%Y%m%d_%H%M')
-    output_filename = time_str + '.nc'
-
-    return output_filename
 
 def extract_one_case(case, output_filepath):
     '''
     提取出一个个例中的降水廓线数据,保存为nc文件.
     01_find_cases中的算法已经保证了每个个例肯定有降水数据.
     '''
-    DPR_extent = config['DPR_extent']
+    # 读取个例的mask.
+    with xr.open_dataset(case['mask_filepath']) as ds:
+        case_mask = ds.case_mask.data
+
     # 读取DPR数据.
     with h5py.File(case['DPR_filepath'], 'r') as f:
-        lon2D = f['NS/Longitude'][:]
-        lat2D = f['NS/Latitude'][:]
-        flagPrecip = f['NS/PRE/flagPrecip'][:]
-        # 选取落入DPR_extent中且有降水的数据点.
-        extent_flag = get_extent_flag_both(lon2D, lat2D, DPR_extent)
-        rain_flag = flagPrecip > 0
-        all_flag = extent_flag & rain_flag
-
         # 读取经纬度.
-        lon1D = lon2D[all_flag]
-        lat1D = lat2D[all_flag]
+        lon1D = f['NS/Longitude'][:][case_mask]
+        lat1D = f['NS/Latitude'][:][case_mask]
         # 读取高度量.
-        elevation = f['NS/PRE/elevation'][:][all_flag]
-        heightStormTop = f['NS/PRE/heightStormTop'][:][all_flag]
-        heightZeroDeg = f['NS/VER/heightZeroDeg'][:][all_flag]
-        binRealSurface = f['NS/PRE/binRealSurface'][:][all_flag]
+        elevation = f['NS/PRE/elevation'][:][case_mask]
+        heightStormTop = f['NS/PRE/heightStormTop'][:][case_mask]
+        heightZeroDeg = f['NS/VER/heightZeroDeg'][:][case_mask]
+        binRealSurface = f['NS/PRE/binRealSurface'][:][case_mask]
         # 读取降水量.
-        typePrecip = f['NS/CSF/typePrecip'][:][all_flag]
-        precipRateNearSurface = f['NS/SLV/precipRateNearSurface'][:][all_flag]
-        precipRate = f['NS/SLV/precipRate'][:][all_flag, :]
-        zFactorCorrected = f['NS/SLV/zFactorCorrected'][:][all_flag, :]
+        typePrecip = f['NS/CSF/typePrecip'][:][case_mask]
+        flagShallowRain = f['NS/CSF/flagShallowRain'][:][case_mask]
+        precipRateNearSurface = f['NS/SLV/precipRateNearSurface'][:][case_mask]
+        precipRate = f['NS/SLV/precipRate'][:][case_mask, :]
+        zFactorCorrected = f['NS/SLV/zFactorCorrected'][:][case_mask, :]
         # 读取DSD量.
-        Nw = f['NS/SLV/paramDSD'][:][all_flag, :, 0]
-        Dm = f['NS/SLV/paramDSD'][:][all_flag, :, 1]
+        paramDSD = f['NS/SLV/paramDSD'][:][case_mask, :, :]
+        Nw = paramDSD[:, :, 0]
+        Dm = paramDSD[:, :, 1]
 
     # 读取ENV数据.
     with h5py.File(case['ENV_filepath'], 'r') as f:
-        airTemperature = f['NS/VERENV/airTemperature'][:][all_flag, :]
+        airTemperature = f['NS/VERENV/airTemperature'][:][case_mask, :]
 
     # 读取SLH数据.
     with h5py.File(case['SLH_filepath'], 'r') as f:
-        SLH = f['Swath/latentHeating'][:][all_flag, :]
+        SLH = f['Swath/latentHeating'][:][case_mask, :]
 
     # 读取VPH数据.
     with xr.open_dataset(case['VPH_filepath'], mask_and_scale=False) as ds:
-        VPH = ds['latentHeating'].data[all_flag, :]
+        VPH = ds['latentHeating'].data[case_mask, :]
 
     # 读取GMI数据.
     with h5py.File(case['GMI_filepath'], 'r') as f:
         lon_GMI = f['S1/Longitude'][:]
         lat_GMI = f['S1/Latitude'][:]
-        extent_flag = get_extent_flag_both(lon_GMI, lat_GMI, DPR_extent)
-        lon_GMI = lon_GMI[extent_flag]
-        lat_GMI = lat_GMI[extent_flag]
-
-        # 读取亮温.
-        Tb = f['S1/Tb'][:][extent_flag, :]
+        Tb = f['S1/Tb'][:]
+    # 用map_extent截取数据.
+    extent_mask = region_mask(lon_GMI, lat_GMI, config['map_extent'])
+    lon_GMI = lon_GMI[extent_mask]
+    lat_GMI = lat_GMI[extent_mask]
+    Tb = Tb[extent_mask, :]
+    Tb89V = Tb[:, 7]
+    Tb89H = Tb[:, 8]
 
     # 读取ERA5数据.
     # 为了简化,选取降水时间前一个小时.
@@ -155,22 +146,17 @@ def extract_one_case(case, output_filepath):
     )
 
     # 划分雨型.
-    # -1表示缺测或没有降水.
+    # -9999表示缺测或没有降水.
     # 1表示stratiform rain.
     # 2表示deep convective rain.
     # 3表示shallow convective rain.
     # 4表示other rain.
-    shallow_flag = \
-        (heightStormTop > fill_value) & \
-        (heightZeroDeg > fill_value) & \
-        (heightStormTop < heightZeroDeg)
     rainType = np.where(typePrecip > 0, typePrecip // 10000000, -9999)
     rainType[rainType == 3] = 4
-    rainType[(rainType == 2) & shallow_flag] = 3
+    rainType[flagShallowRain > 0] = 3
+    rainType[(rainType == 2) & (flagShallowRain == 0)] = 2
 
     # 将GMI亮温匹配到DPR数据点上.
-    Tb89V = Tb[:, 7]
-    Tb89H = Tb[:, 8]
     PCT89 = 1.818 * Tb89V - 0.818 * Tb89H
     points_DPR = np.column_stack([lon1D, lat1D])
     points_GMI = np.column_stack([lon_GMI, lat_GMI])
@@ -266,35 +252,32 @@ if __name__ == '__main__':
     clean_cases = records['clean']['cases']
 
     # 创建输出目录.
-    output_dirpath = Path(config['data_dirpath']) / 'profile_files'
+    output_dirpath = Path(config['temp_dirpath']) / 'profile_files'
     recreate_dir(output_dirpath)
-    # 再创建两个子目录.
-    dusty_dirpath = output_dirpath / 'dusty_cases'
-    clean_dirpath = output_dirpath / 'clean_cases'
-    dusty_dirpath.mkdir()
-    clean_dirpath.mkdir()
+    # 再创建存储单个数据的目录和存储合并数据的目录.
+    single_dirpath = output_dirpath / 'single'
+    merged_dirpath = output_dirpath / 'merged'
+    single_dirpath.mkdir()
+    merged_dirpath.mkdir()
 
-    # 提取出两组个例的廓线数据,分别保存到各自的目录下.
-    # 同时将nc文件路径写入到case中.
-    p = Pool(16)
-    for case in dusty_cases:
-        output_filepath = dusty_dirpath / set_output_filename(case)
-        p.apply_async(extract_one_case, args=(case, output_filepath))
-        case['profile_filepath'] = str(output_filepath)
-    for case in clean_cases:
-        output_filepath = clean_dirpath / set_output_filename(case)
+    # 提取出每个个例的廓线数据,同时将保存的nc文件路径写入到case记录中.
+    p = Pool(8)
+    for case in dusty_cases + clean_cases:
+        output_filename = case['case_number'] + '.nc'
+        output_filepath = single_dirpath / output_filename
         p.apply_async(extract_one_case, args=(case, output_filepath))
         case['profile_filepath'] = str(output_filepath)
     p.close()
     p.join()
 
     # 分别连接两组个例的nc文件,并把文件路径写入到record中.
-    output_filepath1 = output_dirpath / 'dusty_profile.nc'
-    output_filepath2 = output_dirpath / 'clean_profile.nc'
-    concat_cases(dusty_cases, output_filepath1)
-    concat_cases(clean_cases, output_filepath2)
-    records['dusty']['profile_filepath'] = str(output_filepath1)
-    records['clean']['profile_filepath'] = str(output_filepath2)
+    merged_filepath1 = merged_dirpath / 'dusty_profile.nc'
+    merged_filepath2 = merged_dirpath / 'clean_profile.nc'
+    concat_cases(dusty_cases, merged_filepath1)
+    concat_cases(clean_cases, merged_filepath2)
+
+    records['dusty']['profile_filepath'] = str(merged_filepath1)
+    records['clean']['profile_filepath'] = str(merged_filepath2)
 
     # 重新保存修改后的json文件到02的目录下.
     result_dirpath = Path(config['result_dirpath'])

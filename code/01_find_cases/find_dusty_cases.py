@@ -1,105 +1,109 @@
 #----------------------------------------------------------------------------
 # 2021/05/08
-# 从匹配了CALIPSO VFM轨道的降水事件中找出沙尘污染个例和清洁个例.
+# 依据CALIPSO VFM数据的沙尘像元占比,从匹配个例中找出沙尘污染个例和清洁个例.
 #
-# 寻找的算法为:对每个降水事件匹配的VFM轨道来说,若降水中心上下一定纬度范围内的
-# VFM数据中沙尘气溶胶的占比高于给定的阈值,则标记为high;若低于给定的另一个阈值,
-# 则标记为low.如果一个降水事件对应的VFM中存在high,则记为污染个例;若VFM全为
-# low,则记为清洁个例.
+# 算法为:
+# - 对一个匹配个例的每个VFM数据,截取降水中心上下一定纬度范围内的数据,
+#   计算这段数据内沙尘气溶胶像元的占比,将这些占比收集起来.
+# - 若这些占比中存在高于给定阈值的值,则认为该个例为沙尘个例;
+#   若这些占比都低于给定的另一个阈值,则认为该个例为清洁个例;
+#   否则该个例为污染水平普通的个例,不纳入统计.
 #----------------------------------------------------------------------------
 import json
 from pathlib import Path
 from multiprocessing import Pool
-import sys
-sys.path.append('../modules')
-from data_reader import reader_for_CAL
 
 import numpy as np
-import pandas as pd
+
+from data_reader import Reader_for_CAL
 
 # 读取配置文件,将config作为全局变量.
 with open('config.json', 'r') as f:
     config = json.load(f)
 
-def dust_level(vfm):
-    '''根据vfm中沙尘像元的占比,判断沙尘水平.'''
-    d0, d1 = config['DUST_RATIOS']
-    dust_ratio = np.count_nonzero(vfm == 8) / vfm.size * 100
-    if dust_ratio <= d0:
-        return 'low'
-    elif dust_ratio >= d1:
-        return 'high'
-    else:
-        return 'med'
-
-def get_CAL_flag(track, center):
+def get_CAL_mask(track, center):
     '''
-    以降水事件为中心,CAL_width为纬度范围,
+    以降水个例为中心,CAL_width为纬度范围,
     获取落入其中的CALIPSO数据的Boolean数组.
     '''
     CAL_width = config['CAL_width']
     lon, lat = track
     clon, clat = center
     dlat = CAL_width / 2
-    flag = (lat >= (clat - dlat)) & (lat <= (clat + dlat))
+    mask = (lat >= (clat - dlat)) & (lat <= (clat + dlat))
 
-    return flag
+    return mask
 
-def process_one_case(case):
-    '''读取一个降水事件对应的CALIPSO文件,并据此判断事件的污染程度.'''
+def dust_ratio(vfm):
+    '''计算VFM中沙尘像元的百分比占比.'''
+    return np.count_nonzero(vfm == 8) / vfm.size * 100
+
+def case_type(ratios):
+    '''根据沙尘像元百分比决定个例的种类.'''
+    ratios = np.asarray(ratios)
+    d0, d1 = config['DUST_RATIOS']
+    # 若存在大于阈值d1的,视为'dusty';
+    # 若全部小于阈值d0,视为'clean';否则视为'medium'.
+    if np.any(ratios > d1):
+        return 'dusty'
+    elif np.all(ratios < d0):
+        return 'clean'
+    else:
+        return 'medium'
+
+def check_one_case(case):
+    '''根据降水个例匹配的CALIPSO文件决定其污染程度.返回污染类型.'''
     rain_center = case['rain_center']
-    levels = []
+    ratios = []
+    # 收集每个对应的CALIPSO文件的污染程度.
     for CAL_filepath in case['CAL_filepaths']:
-        f = reader_for_CAL(CAL_filepath)
+        f = Reader_for_CAL(CAL_filepath)
         track = f.read_lonlat()
         vfm = f.read_vfm()
         f.close()
 
-        scan_flag = get_CAL_flag(track, rain_center)
-        vfm = vfm[scan_flag, :]
-        levels.append(dust_level(vfm))
+        # 基本上find_matched_cases中已经保证了scan_mask有值.
+        scan_mask = get_CAL_mask(track, rain_center)
+        vfm = vfm[scan_mask, :]
+        ratio = dust_ratio(vfm)
+        ratios.append(ratio)
 
-    # 若存在high level的VFM,那么判定为dusty case.
-    # 若VFM都是low level,那么判定为clean case.
-    if 'high' in levels:
-        return 'dusty'
-    elif levels.count('low') == len(levels):
-        return 'clean'
-    else:
-        return None
+    return case_type(ratios)
 
 if __name__ == '__main__':
+    # 读取匹配的降水个例.
     result_dirpath = Path(config['result_dirpath'])
-    input_filepath = result_dirpath / 'rain_events_matched.json'
+    input_filepath = result_dirpath / 'matched_cases.json'
     with open(str(input_filepath), 'r') as f:
         cases = json.load(f)
 
-    p = Pool(16)
-    results = p.map(process_one_case, cases)
+    # 判断每个个例的污染程度.
+    p = Pool(8)
+    types = p.map(check_one_case, cases)
     p.close()
     p.join()
-    # 寻找dusty和clean个例.
-    dusty_cases = []
-    clean_cases = []
-    for case, result in zip(cases, results):
-        if result == 'dusty':
-            dusty_cases.append(case)
-        elif result == 'clean':
-            clean_cases.append(case)
-        else:
-            continue
+    # 根据污染程度筛选出沙尘个例和清洁个例.
+    dusty_cases = [case for t, case in zip(types, cases) if t == 'dusty']
+    clean_cases = [case for t, case in zip(types, cases) if t == 'clean']
 
-    # 将结果输出到json文件中.
+    # 打印找到的个例数.
+    ndusty = len(dusty_cases)
+    nclean = len(clean_cases)
+    print(f'{ndusty} dusty cases found')
+    print(f'{nclean} clean cases found')
+
+    # 将结果输出到一个json文件中.
     records = {
         'dusty': {
-            'number': len(dusty_cases),
+            'num': ndusty,
             'cases': dusty_cases
         },
         'clean': {
-            'number': len(clean_cases),
+            'num': nclean,
             'cases': clean_cases
         }
     }
+    # 把找到的结果写到json文件中.
     output_filepath = result_dirpath / 'found_cases.json'
     with open(str(output_filepath), 'w') as f:
         json.dump(records, f, indent=4)

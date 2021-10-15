@@ -7,7 +7,6 @@ from pathlib import Path
 
 import numpy as np
 import xarray as xr
-
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
@@ -39,7 +38,7 @@ def draw_Rtype_plot(dusty_ds, clean_ds, output_filepath):
     ax.bar(
         x + width / 2, data[:, 1], width, color='C0', label=f'Clean'
     )
-    ax.legend(loc='upper left')
+    ax.legend(loc='upper right')
     ax.set_xlim(0.5, 4.5)
     ax.set_ylim(0, 100)
     ax.set_xticks(x)

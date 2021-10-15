@@ -10,7 +10,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
@@ -29,12 +28,10 @@ def count_month(dates):
 
 if __name__ == '__main__':
     result_dirpath = Path(config['result_dirpath'])
-    dusty_filepath = result_dirpath / 'dusty_cases.json'
-    clean_filepath = result_dirpath / 'clean_cases.json'
-    with open(str(dusty_filepath), 'r') as f:
-        dusty_cases = json.load(f)
-    with open(str(clean_filepath), 'r') as f:
-        clean_cases = json.load(f)
+    with open(str(result_dirpath / 'found_cases.json'), 'r') as f:
+        records = json.load(f)
+    dusty_cases = records['dusty']['cases']
+    clean_cases = records['clean']['cases']
 
     # 统计月份频次.
     dusty_dates = pd.to_datetime([case['rain_time'] for case in dusty_cases])

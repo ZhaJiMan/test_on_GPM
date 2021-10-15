@@ -11,16 +11,19 @@
         32,
         45
     ],
-    "CAL_width": 12,
     "start_time": "2014-03-08",
     "end_time": "2020-12-31",
-    "RAIN_PIXEL_NUM": 800,
+    "RAIN_PIXEL_NUM": 200,
+    "RAIN_RADIUS": 5,
+    "OCEAN_RATIO": 20,
     "TIME_DIFF": 8,
-    "SPACE_DIFF": 3.5,
+    "SPACE_DIFF": 3.8,
+    "CAL_width": 10,
     "DUST_RATIOS": [
         0.5,
         2.5
     ],
     "data_dirpath": "/d4/wangj/dust_precipitation/data",
+    "temp_dirpath": "/d4/wangj/dust_precipitation/data/composite_temp",
     "result_dirpath": "/d4/wangj/dust_precipitation/results/01_find_cases"
 }

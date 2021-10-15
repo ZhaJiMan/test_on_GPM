@@ -12,6 +12,7 @@ if __name__ == '__main__':
         'DPR_extent': [110, 124, 32, 45],
         'input_dirpath': '/d4/wangj/dust_precipitation/results/01_find_cases',
         'data_dirpath': '/d4/wangj/dust_precipitation/data',
+        'temp_dirpath': '/d4/wangj/dust_precipitation/data/composite_temp',
         'result_dirpath': '/d4/wangj/dust_precipitation/results/02_extract_profiles'
     }
     with open('config.json', 'w') as f:

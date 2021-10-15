@@ -4,6 +4,7 @@
 #
 # 画出的变量有:
 # - 地表降水率
+# - 雨顶高度
 # - 雨顶温度
 # - PCT89
 # 其中地表降水率采用对数坐标表示.
@@ -13,25 +14,35 @@
 #----------------------------------------------------------------------------
 import json
 from pathlib import Path
+import sys
+sys.path.append('../modules')
 
 import numpy as np
 import xarray as xr
-from scipy.special import exp10
-
+from scipy.ndimage import gaussian_filter1d
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+
+from helper_funcs import letter_subplots
 
 # 读取配置文件,作为全局变量使用.
 with open('config.json', 'r') as f:
     config = json.load(f)
 
+# 全局的平滑参数.
+SMOOTH = True
+SIGMA = 1
+
 def hist1D(x, bins):
     '''
-    计算一维histogram,并用总和进行归一化.
+    计算一维histogram,并用总和进行归一化,单位为百分比.
 
-    要求bins单调递增.
+    要求bins单调递增.可以进行平滑.
     '''
     h = np.histogram(x, bins)[0]
+    if SMOOTH:
+        h = gaussian_filter1d(h, sigma=SIGMA)
+    # 进行归一化.
     s = h.sum()
     if s > 0:
         h = h / s * 100
@@ -53,31 +64,32 @@ if __name__ == '__main__':
 
     # 用data存储计算出的histogram.
     # 第一维表示两种雨型,第二维表示三个变量,第三维表示污染分组.
-    data = np.empty((2, 3, 2), dtype=object)
+    data = np.empty((2, 4, 2), dtype=object)
     for k, ds in enumerate(ds_list):
         rainType = ds.rainType.data
         for i in range(2):
             # 根据雨型进行筛选.
             flag = rainType == (i + 1)
-            var1 = ds.precipRateNearSurface.data[flag]
-            var2 = ds.tempStormTop.data[flag]
-            var3 = ds.PCT89.data[flag]
-
-            # 去掉降水率为0的点.
-            var1 = var1[var1 > 0]
+            var1 = ds.precipRateNearSurface.data[flag]  # 已经保证大于0.
+            var2 = ds.heightStormTop.data[flag]
+            var3 = ds.tempStormTop.data[flag]
+            var4 = ds.PCT89.data[flag]
 
             # 计算histogram.
-            bins1 = np.linspace(-2, 2, 40)
-            h1 = hist1D(np.log10(var1), bins1)
-            bins2 = np.linspace(-60, 20, 40)
+            bins1 = np.logspace(-2, 2, 40)
+            h1 = hist1D(var1, bins1)
+            bins2 = np.linspace(0, 12, 40)
             h2 = hist1D(var2, bins2)
-            bins3 = np.linspace(150, 300, 40)
+            bins3 = np.linspace(-60, 20, 40)
             h3 = hist1D(var3, bins3)
+            bins4 = np.linspace(150, 300, 40)
+            h4 = hist1D(var4, bins4)
 
             # 存储到data中.
-            data[i, 0, k] = (exp10(bins1), h1)
+            data[i, 0, k] = (bins1, h1)
             data[i, 1, k] = (bins2, h2)
             data[i, 2, k] = (bins3, h3)
+            data[i, 3, k] = (bins4, h4)
 
     # 画图用的参数.
     Rstrs = ['Stratiform', 'Convective']
@@ -86,22 +98,22 @@ if __name__ == '__main__':
 
     # 组图形状为(2, 3).
     # 行表示两种雨型,列表示三种变量,每张子图中画有两组的histogram.
-    fig, axes = plt.subplots(2, 3, figsize=(9, 6))
+    fig, axes = plt.subplots(2, 4, figsize=(12, 6))
     fig.subplots_adjust(hspace=0.25, wspace=0.25)
     # 在每张子图里画出两组histogram.
     for i in range(2):
-        for j in range(3):
+        for j in range(4):
+            ax = axes[i, j]
             for k in range(2):
                 group = groups[k]
                 color = colors[k]
                 bins, h = data[i, j, k]
-                # 因为h经过处理,所以这里用bar手动画出histogram.
-                axes[i, j].bar(
-                    bins[:-1], h, width=np.diff(bins),
-                    align='edge', alpha=0.5, color=color, label=group
-                )
+                # 画线并填色.
+                x = (bins[1:] + bins[:-1]) / 2
+                ax.plot(x, h, color=color, lw=1.5, label=group)
+                ax.fill_between(x, h, color=color, alpha=0.4)
             # 用legend标出分组.
-            axes[i, j].legend(fontsize='x-small', loc='upper right')
+            ax.legend(fontsize='x-small', loc='upper right')
 
     # 设置第一列的xticks.
     for ax in axes[:, 0]:
@@ -110,11 +122,16 @@ if __name__ == '__main__':
         ax.xaxis.set_major_formatter(mpl.ticker.ScalarFormatter())
     # 设置第二列的xticks.
     for ax in axes[:, 1]:
+        ax.set_xlim(0, 12)
+        ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(2))
+        ax.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(1))
+    # 设置第三列的xticks.
+    for ax in axes[:, 2]:
         ax.set_xlim(20, -60)
         ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(20))
         ax.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(10))
-    # 设置第三列的xticks.
-    for ax in axes[:, 2]:
+    # 设置第四列的xticks.
+    for ax in axes[:, 3]:
         ax.set_xlim(150, 300)
         ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(30))
         ax.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(15))
@@ -126,9 +143,10 @@ if __name__ == '__main__':
         ax.tick_params(labelsize='x-small')
 
     # 在最下面标出xlabel.
-    axes[1, 0].set_xlabel('Rain Rate (mm/h)', fontsize='small')
-    axes[1, 1].set_xlabel('Temperature of Storm Top (℃)', fontsize='small')
-    axes[1, 2].set_xlabel('PCT89 (K)', fontsize='small')
+    axes[1, 0].set_xlabel('Surface Rain Rate (mm/h)', fontsize='small')
+    axes[1, 1].set_xlabel('Height of Storm Top (km)', fontsize='small')
+    axes[1, 2].set_xlabel('Temperature of Storm Top (℃)', fontsize='small')
+    axes[1, 3].set_xlabel('PCT89 (K)', fontsize='small')
     # 在最左边标出ylabel.
     for ax in axes[:, 0]:
         ax.set_ylabel('PDF (%)', fontsize='small')
@@ -137,7 +155,10 @@ if __name__ == '__main__':
     for i in range(2):
         Rstr = Rstrs[i]
         for ax in axes[i, :]:
-            ax.set_title(Rstr, loc='left', fontsize='small')
+            ax.set_title(Rstr, fontsize='small')
+
+    # 为子图标出字母标识.
+    letter_subplots(axes, (0.06, 0.95), 'small')
 
     # 保存图片.
     output_filepath = output_dirpath / 'hist1D.png'

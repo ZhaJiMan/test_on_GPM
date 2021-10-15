@@ -8,19 +8,29 @@ import json
 from pathlib import Path
 import sys
 sys.path.append('../modules')
-from profile_funcs import calc_cfad
-from helper_funcs import recreate_dir, decompose_int
 
 import numpy as np
 import xarray as xr
-
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import cmaps
 
+from profile_funcs import calc_cfad
+from helper_funcs import recreate_dir
+
 # 读取配置文件,作为全局变量使用.
 with open('config.json', 'r') as f:
     config = json.load(f)
+
+def decompose_int(x):
+    '''将整数x分解为m*n的形式,m*n大于等于x,同时形状接近于正方形.'''
+    mid = np.sqrt(x)
+    m = int(np.floor(mid))
+    n = int(np.ceil(mid))
+    if m * n < x:
+        m += 1
+
+    return m, n
 
 def draw_one_plot(cases, Rtype, fig_title, output_filepath):
     '''画出一组个例的某个雨型的CFAD组图.'''
@@ -53,7 +63,9 @@ def draw_one_plot(cases, Rtype, fig_title, output_filepath):
         npoints[i] = np.count_nonzero(flag)
         if npoints[i] > 0:
             z = z[flag, :]
-            cfads[i, :, :] = calc_cfad(z, hgt, xbins, ybins, norm='sum')
+            cfads[i, :, :] = calc_cfad(
+                z, hgt, xbins, ybins, norm='sum'
+            ) * 100
         else:
             continue
 
@@ -70,7 +82,11 @@ def draw_one_plot(cases, Rtype, fig_title, output_filepath):
         npoint = npoints[i]
 
         # 画出CFAD图.
-        im = ax.pcolormesh(xbins, ybins, cfad, cmap=cmap, vmin=0)
+        if npoint == 0:
+            norm = mpl.colors.Normalize(vmin=0, vmax=1)
+        else:
+            norm = mpl.colors.Normalize(vmin=0, vmax=None)
+        im = ax.pcolormesh(xbins, ybins, cfad, cmap=cmap, norm=norm)
         cbar = fig.colorbar(im, ax=ax, aspect=30, extend='both')
         cbar.ax.tick_params(labelsize='xx-small')
         cbar.ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(6))

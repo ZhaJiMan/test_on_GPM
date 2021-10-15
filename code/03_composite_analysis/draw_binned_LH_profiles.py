@@ -18,44 +18,33 @@
 import json
 from pathlib import Path
 from collections import namedtuple
-
 import sys
 sys.path.append('../modules')
-from profile_funcs import Binner
 
 import numpy as np
 import xarray as xr
 from scipy.stats import mstats
-# from scipy.ndimage import gaussian_filter1d
-
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+
+from profile_funcs import Binner, smooth_profiles
+from helper_funcs import letter_subplots
 
 # 读取配置文件,作为全局变量使用.
 with open('config.json', 'r') as f:
     config = json.load(f)
 
-def is_decreasing(x):
-    '''判断序列是否单调递减.'''
-    if len(x) >= 2 and np.all(np.diff(x) < 0):
-        return True
-    else:
-        return False
+# 全局的平滑参数.
+SMOOTH = True
+SIGMA = 2
 
-def calc_profiles(ds1, ds2, bins, xvarname, yvarname, smooth=False):
+def calc_profiles(ds1, ds2, bins, xvarname, yvarname):
     '''
     计算两组数据中廓线数据根据另一个变量分bin后的平均廓线.
     并将廓线数据汇总到数组中,以方便比较.
 
     返回温度坐标,廓线条数,平均廓线和标准误差廓线.
     '''
-    # 本来Binner只支持单调递增的bins,这里出于需求进行修改.
-    if is_decreasing(bins):
-        reverse_flag = True
-        bins = bins[::-1]
-    else:
-        reverse_flag = False
-
     nbin = len(bins) - 1
     temp = ds1.temp.data
     # 提前准备好数组.
@@ -82,11 +71,10 @@ def calc_profiles(ds1, ds2, bins, xvarname, yvarname, smooth=False):
     sem_profiles = sem_profiles[:, :, temp <= 10]
     temp = temp[temp <= 10]
 
-    # 如果bins单调递减,倒转结果.
-    if reverse_flag:
-        npoints = npoints[:, ::-1]
-        mean_profiles = mean_profiles[:, ::-1, :]
-        sem_profiles = sem_profiles[:, ::-1, :]
+    # 进行平滑.
+    if SMOOTH:
+        mean_profiles = smooth_profiles(mean_profiles, sigma=SIGMA)
+        sem_profiles = smooth_profiles(sem_profiles, sigma=SIGMA)
 
     # 用namedtuple存储结果.
     Data = namedtuple(
@@ -201,6 +189,9 @@ def draw_LH_profiles(
     for ax in axes[:, 0]:
         ax.set_ylabel('Temperature (℃)', fontsize='x-small')
 
+    # 为子图标出字母标识.
+    letter_subplots(axes, (0.08, 0.96), 'x-small')
+
     # 隐藏多余的子图.
     for ax in axes[0, nbin_stra:]:
         ax.set_visible(False)
@@ -219,8 +210,8 @@ if __name__ == '__main__':
     input_dirpath = Path(config['input_dirpath'])
     with open(str(input_dirpath / 'found_cases.json'), 'r') as f:
         records = json.load(f)
-    dusty_ds = xr.open_dataset(records['dusty']['profile_filepath'])
-    clean_ds = xr.open_dataset(records['clean']['profile_filepath'])
+    dusty_ds = xr.load_dataset(records['dusty']['profile_filepath'])
+    clean_ds = xr.load_dataset(records['clean']['profile_filepath'])
 
     # 若输出目录不存在,那么新建.
     output_dirpath = Path(config['result_dirpath']) / 'LH_profiles'

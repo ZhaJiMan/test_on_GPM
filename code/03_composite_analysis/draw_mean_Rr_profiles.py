@@ -15,18 +15,25 @@
 import json
 from pathlib import Path
 from collections import namedtuple
+import sys
+sys.path.append('../modules')
 
 import numpy as np
 import xarray as xr
 from scipy.stats import mstats
-# from scipy.ndimage import gaussian_filter1d
-
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+
+from profile_funcs import smooth_profiles
+from helper_funcs import letter_subplots
 
 # 读取配置文件,作为全局变量使用.
 with open('config.json', 'r') as f:
     config = json.load(f)
+
+# 全局的平滑参数.
+SMOOTH = True
+SIGMA = 2
 
 if __name__ == '__main__':
     # 读取dusty cases和clean cases.
@@ -72,10 +79,16 @@ if __name__ == '__main__':
                 var = ds[varname].isel(npoint=cond).to_masked_array()
                 mean_profiles[i, j, k, :] = var.mean(axis=0)
                 sem_profiles[i, j, k, :] = mstats.sem(var, axis=0)
+
     # 仅选取10℃高度以上的数据.
     mean_profiles = mean_profiles[..., temp <= 10]
     sem_profiles = sem_profiles[..., temp <= 10]
     temp = temp[temp <= 10]
+
+    # 进行平滑.
+    if SMOOTH:
+        mean_profiles = smooth_profiles(mean_profiles, sigma=SIGMA)
+        sem_profiles = smooth_profiles(sem_profiles, sigma=SIGMA)
 
     # 画图用的参数.
     groups = ['Dusty', 'Clean']
@@ -153,6 +166,9 @@ if __name__ == '__main__':
             handles=lines, loc='center left', bbox_to_anchor=(1.05, 0.5),
             handlelength=1, fontsize='x-small'
         )
+
+    # 为子图标出字母标识.
+    letter_subplots(axes, (0.08, 0.96), 'x-small')
 
     # 保存图片.
     fig.savefig(str(output_filepath), dpi=300, bbox_inches='tight')

@@ -1,3 +1,7 @@
+#----------------------------------------------------------------------------
+# 2021/07/08
+# 一些辅助用的函数.
+#----------------------------------------------------------------------------
 import shutil
 
 import numpy as np
@@ -8,13 +12,16 @@ def recreate_dir(dirpath):
         shutil.rmtree(str(dirpath))
     dirpath.mkdir()
 
-def decompose_int(x):
-    '''将整数x分解为m*n的形式,m*n大于等于x,同时形状接近于正方形.'''
-    mid = np.sqrt(x)
-    m = int(np.floor(mid))
-    n = int(np.ceil(mid))
-    if m * n < x:
-        m += 1
+def letter_subplots(axes, position, fontsize):
+    '''
+    给形状相同的组图里的每个子图标注字母.
 
-    return m, n
-
+    position为Axes坐标下字母的位置.
+    (0, 0)表示左下角,(1, 1)表示右上角.
+    '''
+    for i, ax in enumerate(axes.flat):
+        letter = chr(ord('`') + i + 1)
+        ax.text(
+            *position, f'({letter})', fontsize=fontsize,
+            ha='center', va='center', transform=ax.transAxes
+        )

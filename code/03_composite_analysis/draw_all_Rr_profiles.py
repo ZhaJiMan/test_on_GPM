@@ -6,12 +6,15 @@
 #----------------------------------------------------------------------------
 import json
 from pathlib import Path
+import sys
+sys.path.append('../modules')
 
 import numpy as np
 import xarray as xr
-
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+
+from helper_funcs import letter_subplots
 
 # 读取配置文件,作为全局变量使用.
 with open('config.json', 'r') as f:
@@ -43,7 +46,7 @@ def draw_profiles_hgt(dusty_ds, clean_ds, output_filepath):
     cmap = mpl.cm.get_cmap('jet', nbin)
     cmap.set_under('white')
     # 将缺测值设为红色.
-    cmap.set_bad('red')
+    cmap.set_bad('black')
 
     # 组图的行表示雨型,列表示污染分组.
     groups = ['Dusty', 'Clean']
@@ -82,6 +85,9 @@ def draw_profiles_hgt(dusty_ds, clean_ds, output_filepath):
     for ax in axes[:, 0]:
         ax.set_ylabel('Height [km]', fontsize='x-small')
 
+    # 为子图标出字母标识.
+    letter_subplots(axes, (0.04, 0.94), 'x-small')
+
     fig.savefig(str(output_filepath), dpi=300, bbox_inches='tight')
     plt.close(fig)
 
@@ -107,7 +113,7 @@ def draw_profiles_temp(dusty_ds, clean_ds, output_filepath):
     cmap = mpl.cm.get_cmap('jet', nbin)
     cmap.set_under('white')
     # 将缺测值设为红色.
-    cmap.set_bad('red')
+    cmap.set_bad('black')
 
     groups = ['Dusty', 'Clean']
     Rtypes = ['Stratiform', 'Convective']
@@ -145,6 +151,9 @@ def draw_profiles_temp(dusty_ds, clean_ds, output_filepath):
         ax.set_xlabel('Number', fontsize='x-small')
     for ax in axes[:, 0]:
         ax.set_ylabel('Temperature (℃)', fontsize='x-small')
+
+    # 为子图标出字母标识.
+    letter_subplots(axes, (0.04, 0.94), 'x-small')
 
     fig.savefig(str(output_filepath), dpi=300, bbox_inches='tight')
     plt.close(fig)
