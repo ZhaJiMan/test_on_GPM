@@ -1,29 +1,26 @@
 {
-    "map_extent": [
+    "extents_map": [
         100,
         130,
         25,
         50
     ],
-    "DPR_extent": [
+    "extents_DPR": [
         110,
         124,
         32,
         45
     ],
-    "start_time": "2014-03-08",
-    "end_time": "2020-12-31",
-    "RAIN_PIXEL_NUM": 200,
+    "time_start": "2014-01-01",
+    "time_end": "2020-12-31",
+    "RAIN_PIXEL_NUM": 50,
     "RAIN_RADIUS": 5,
     "OCEAN_RATIO": 20,
-    "TIME_DIFF": 8,
-    "SPACE_DIFF": 3.8,
-    "CAL_width": 10,
-    "DUST_RATIOS": [
-        0.5,
-        2.5
-    ],
-    "data_dirpath": "/d4/wangj/dust_precipitation/data",
-    "temp_dirpath": "/d4/wangj/dust_precipitation/data/composite_temp",
-    "result_dirpath": "/d4/wangj/dust_precipitation/results/01_find_cases"
+    "AOD_TIME_ADVANCE": 2,
+    "AOD_BOX_LENGTH": 10,
+    "LAT_LENGTH": 10,
+    "DIFF_TIME": 8,
+    "DIFF_SPACE": 5,
+    "dirpath_data": "/d4/wangj/dust_precipitation/data",
+    "dirpath_result": "/d4/wangj/dust_precipitation/results/01_find_cases"
 }

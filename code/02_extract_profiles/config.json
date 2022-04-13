@@ -1,18 +1,17 @@
 {
-    "map_extent": [
+    "extents_map": [
         100,
         130,
         25,
         50
     ],
-    "DPR_extent": [
+    "extents_DPR": [
         110,
         124,
         32,
         45
     ],
-    "input_dirpath": "/d4/wangj/dust_precipitation/results/01_find_cases",
-    "data_dirpath": "/d4/wangj/dust_precipitation/data",
-    "temp_dirpath": "/d4/wangj/dust_precipitation/data/composite_temp",
-    "result_dirpath": "/d4/wangj/dust_precipitation/results/02_extract_profiles"
+    "dirpath_input": "/d4/wangj/dust_precipitation/results/01_find_cases",
+    "dirpath_data": "/d4/wangj/dust_precipitation/data",
+    "dirpath_result": "/d4/wangj/dust_precipitation/results/02_extract_profiles"
 }

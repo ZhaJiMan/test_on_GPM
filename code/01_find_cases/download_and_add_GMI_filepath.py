@@ -1,61 +1,84 @@
-#----------------------------------------------------------------------------
-# 2021/05/08
-# 为找出的所有个例下载对应的GMI 1B资料,并将文件路径写入到记录中.
-#
-# 因为服务器上暂无完整的GMI数据,所以这里进行手动下载.下载可能需要数分钟.
-#
-# 下载通过wget实现,命令见GES DISC网站说明.
-# 需要提前准备好含有2014~2020年数据的下载链接的subset文本文件.
-#----------------------------------------------------------------------------
+'''
+2022-04-12
+下载污染个例和清洁个例对应的GMI文件, 并将文件路径写入个例记录中.
+
+流程:
+- 预先准备含下载URL的文本文件, 根据个例的DPR文件路径中的轨道号搜索对应的
+  URL并使用wget下载, 最后将下载文件的路径写入到个例记录中.
+- 为了节省下载时间, 会保留之前下载好的文件, 并检查是否有重复下载.
+
+输入:
+- cases_dusty.json
+- cases_clean.json
+
+输出:
+- CSH文件.
+- cases_dusty.json
+- cases_clean.json
+
+参考:
+- https://disc.gsfc.nasa.gov/data-access
+'''
 import json
 from pathlib import Path
 import subprocess
 import sys
 sys.path.append('../modules')
 
-from helper_funcs import recreate_dir
+import helper_tools
 
 # 读取配置文件,作为全局变量.
 with open('config.json', 'r') as f:
     config = json.load(f)
 
 if __name__ == '__main__':
-    result_dirpath = Path(config['result_dirpath'])
-    with open(str(result_dirpath / 'found_cases.json'), 'r') as f:
-        records = json.load(f)
-    dusty_cases = records['dusty']['cases']
-    clean_cases = records['clean']['cases']
+    # 读取两组个例.
+    dirpath_result = Path(config['dirpath_result'])
+    filepath_dusty = dirpath_result / 'cases_dusty.json'
+    filepath_clean = dirpath_result / 'cases_clean.json'
+    with open(str(filepath_dusty)) as f:
+        cases_dusty = json.load(f)
+    with open(str(filepath_clean)) as f:
+        cases_clean = json.load(f)
 
-    # 设置用于下载GMI数据的txt文件的路径,并重新创建存储GMI数据的目录.
-    data_dirpath = Path(config['data_dirpath'])
-    temp_dirpath = Path(config['temp_dirpath'])
-    download_list_filepath = data_dirpath / 'subset_GPM_1BGMI.txt'
-    output_dirpath = temp_dirpath / 'GMI'
-    recreate_dir(output_dirpath)
+    # URL文件和输出目录的路径.
+    dirpath_data = Path(config['dirpath_data'])
+    filepath_url = dirpath_data / 'subset_GPM_1BGMI.txt'
+    dirpath_output = dirpath_data / 'GMI'
+    helper_tools.new_dir(dirpath_output)
 
-    # 读取含有下载链接的文本文件,将其中的链接与orbit number对应起来.
-    link_dict = {}
-    with open(str(download_list_filepath), 'r') as f:
+    # 将URL与文件轨道号关联.
+    dict_url = {}
+    with open(str(filepath_url)) as f:
         for line in f:
-            link = line.strip('\n')
-            GMI_filename = link.split('/')[-1]
-            orbit_number = GMI_filename.split('.')[-3]
-            link_dict[orbit_number] = link
+            url = line.strip('\n')
+            filename_GMI = url.split('/')[-1]
+            orbit_number = filename_GMI.split('.')[-3]
+            dict_url[orbit_number] = url
 
-    # 根据每个case含有的DPR文件的orbit number下载对应的GMI文件.
-    for case in dusty_cases + clean_cases:
-        DPR_filepath = Path(case['DPR_filepath'])
-        DPR_filename = DPR_filepath.name
-        orbit_number = DPR_filename.split('.')[-3]
-        link = link_dict[orbit_number]
-        GMI_filename = link.split('/')[-1]
-        GMI_filepath = output_dirpath / GMI_filename
-        # 不同个例可能处在同一轨GPM数据上,避免重复下载.
-        if not GMI_filepath.exists():
-            command = f'wget --load-cookies ~/.urs_cookies --save-cookies ~/.urs_cookies --auth-no-challenge=on --keep-session-cookies --content-disposition -N {link} -P {str(output_dirpath)}'
-            subprocess.run(command, shell=True)
-        case['GMI_filepath'] = str(GMI_filepath)
+    # 根据个例的轨道号下载对应的GMI文件.
+    for case in cases_dusty + cases_clean:
+        case_number = case['case_number']
+        orbit_number = case_number.split('_')[0]
+        url = dict_url[orbit_number]
+        filename_GMI = url.split('/')[-1]
+        filepath_GMI = dirpath_output / filename_GMI
+        # 不同个例可能对应于同一轨文件, 要避免重复下载.
+        if not filepath_GMI.exists():
+            args = [
+                'wget',
+                '--load-cookies', '~/.urs_cookies',
+                '--save-cookies', '~/.urs_cookies',
+                '--auth-no-challenge=on',
+                '--keep-session-cookies',
+                '-N', url,
+                '-P', str(dirpath_output)
+            ]
+            subprocess.run(args)
+        case['filepath_GMI'] = str(filepath_GMI)
 
-    # 重新保存修改后的case.
-    with open(str(result_dirpath / 'found_cases.json'), 'w') as f:
-        json.dump(records, f, indent=4)
+    # 重新写成json文件.
+    with open(str(filepath_dusty), 'w') as f:
+        json.dump(cases_dusty, f, indent=4)
+    with open(str(filepath_clean), 'w') as f:
+        json.dump(cases_clean, f, indent=4)

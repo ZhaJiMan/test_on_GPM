@@ -4,6 +4,7 @@
 ; - 将潜热的变量名改为latentHeating,缺测值改为-9999.9.
 ; - 潜热的高度随序数增大而增大.
 ; - 去掉了precipRate和airTemperature的保存,以减小文件体积.
+; - 使用更新后的截距和斜率参数.
 ; - 不把过高或过低的f3d设为缺测?
 ;---------------------------------------------------------------------------
 
@@ -366,14 +367,14 @@ x1      = where(stem.lt.-38,0,x1);
 pck     = (Lv*x1+Ls*(1-x1))/(Cpa*rhoa*Va);
 
 ;LH
-awl     := (/-0.08,2.06/);warm layer, low
-aws     := (/-0.13,2.28/);warm layer,slope
-aml     := (/0.03,2.29/);mixing layer, low
-ams     := (/0.07,2.27/);mixing layer,slope
-amp     := (/0.08,2.42/);mixing layer,plateau
-acl     := (/0.59,0.37/);cold layer, low
-acs     := (/0.51,0.58/);cold layer,slope
-acp     := (/0.61,0.36/);cold layer,plateau
+awl     := (/-0.855, 0.887/);warm layer, low
+aws     := (/-0.855, 0.887/);warm layer,slope
+aml     := (/-0.28, 1.838/);mixing layer, low
+ams     := (/-0.28, 1.838/);mixing layer,slope
+amp     := (/-0.28, 1.838/);mixing layer,plateau
+acl     := (/0.105, 0.564/);cold layer, low
+acs     := (/0.105, 0.564/);cold layer,slope
+acp     := (/0.105, 0.564/);cold layer,plateau
 
 a03d        = new(dimr,float,fillv);
 a13d        = a03d;

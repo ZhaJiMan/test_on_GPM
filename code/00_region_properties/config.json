@@ -1,0 +1,18 @@
+{
+    "extents_map": [
+        100,
+        130,
+        25,
+        50
+    ],
+    "extents_DPR": [
+        110,
+        124,
+        32,
+        45
+    ],
+    "time_start": "2014-01-01",
+    "time_end": "2020-12-31",
+    "dirpath_data": "/d4/wangj/dust_precipitation/data",
+    "dirpath_result": "/d4/wangj/dust_precipitation/results/00_region_properties"
+}
